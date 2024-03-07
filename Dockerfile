@@ -35,21 +35,21 @@ RUN python3 -m pip install \
     Pillow \
     requests
 
-ARG BASE_DIR=/root/diffusion
-
-RUN mkdir -p $BASE_DIR
-RUN wget https://github.com/JeonChangmin/latent-diffusion/archive/refs/heads/main.zip -O $BASE_DIR/main.zip
-RUN unzip $BASE_DIR/main.zip -d $BASE_DIR
-RUN mv $BASE_DIR/latent-diffusion-main $BASE_DIR/latent-diffusion
-RUN rm $BASE_DIR/main.zip
-
 RUN apt-get update && apt-get install -y --no-install-recommends git
 
-WORKDIR $BASE_DIR/latent-diffusion
 RUN python3 -m pip install \
     -e git+https://github.com/CompVis/taming-transformers.git@master#egg=taming-transformers \
     -e git+https://github.com/openai/CLIP.git@main#egg=clip
 
 RUN python3 -m pip install ftfy accelerate scipy
+
+ARG BASE_DIR=/root/diffusion
+
+RUN mkdir -p $BASE_DIR
+RUN git clone --depth 1 https://github.com/JeonChangmin/latent-diffusion.git $BASE_DIR/latent-diffusion
+
+RUN cp $BASE_DIR/latent-diffusion/notebooks/DDPM_DDIM_CFG_tutorial.ipynb $BASE_DIR/
+RUN cp $BASE_DIR/latent-diffusion/notebooks/Diffusers_Tasks_Tutorial.ipynb $BASE_DIR/
+RUN cp $BASE_DIR/latent-diffusion/notebooks/Diffusers_tutorial_pipeline.ipynb $BASE_DIR/
 
 WORKDIR $BASE_DIR
