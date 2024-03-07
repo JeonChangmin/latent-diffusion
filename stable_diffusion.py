@@ -180,7 +180,7 @@ if __name__ == "__main__":
         pprint(model_config)
     model = LatentDiffusion(**model_config)
     missing_keys, unexpected_keys = model.load_state_dict(
-        state_dict_of("models/ldm/text2img-large/model.ckpt"), strict=False
+        state_dict_of("/data1/diffusion/stable-diffusion.ckpt"), strict=False
     )
     assert not missing_keys
     model.eval()
