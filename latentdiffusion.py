@@ -32,7 +32,7 @@ class LatentDiffusion(nn.Module):
         self.first_stage_model = AutoencoderKL(**first_stage_config)
         self.cond_stage_model = BERTEmbedder(**cond_stage_config)
         self.scale_factor = scale_factor
-        self.ddpm_num_timesteps = int(timesteps)
+        self.num_timesteps = int(timesteps)
 
         betas = (
             np.linspace(linear_start**0.5, linear_end**0.5, timesteps, dtype=np.float64)
@@ -52,7 +52,7 @@ class LatentDiffusion(nn.Module):
         )
 
     def forward(self, x, t, cond):
-        return self.model(x, t, context=torch.cat([cond], 1))
+        return self.model(x, t, context=cond)
 
 
 class DDIMSamper:
@@ -71,20 +71,33 @@ class DDIMSamper:
         unconditional_conditioning=None,
         temperature=1.0,
     ):
-
-        device = self.model.alphas_cumprod.device
-        samples = torch.randn((batch_size, *img_shape), device=device)
-        timesteps = (
+        ddim_timesteps = (
             np.arange(0, self.ddpm_num_timesteps, self.ddpm_num_timesteps // ddim_steps)
             + 1
         )
+
+        device = self.model.alphas_cumprod.device
+        alphas_cumprod = self.model.alphas_cumprod.cpu()
+        ddim_alphas = alphas_cumprod[ddim_timesteps]
+        ddim_alphas_prev = np.hstack([alphas_cumprod[0], alphas_cumprod[ddim_timesteps[:-1]]])
+        ddim_sqrt_one_minus_alphas = np.sqrt(1.0 - ddim_alphas)
+        ddim_sigmas = np.zeros(len(ddim_timesteps), dtype=np.float32)
+
+        to_torch = lambda x: torch.tensor(x, dtype=torch.float32).to(device)
+        self.ddim_alphas = to_torch(ddim_alphas)
+        self.ddim_alphas_prev = to_torch(ddim_alphas_prev)
+        self.ddim_sqrt_one_minus_alphas = to_torch(ddim_sqrt_one_minus_alphas)
+        self.ddim_sigmas = to_torch(ddim_sigmas)
+
+        samples = torch.randn((batch_size, *img_shape), device=device)  # 4, 4, 32, 32
+        total_steps = len(ddim_timesteps)
         iterator = tqdm(
-            np.flip(timesteps),
-            total=self.ddpm_num_timesteps,
+            np.flip(ddim_timesteps),
+            total=total_steps,
         )
         for i, step in enumerate(iterator):
-            timestamp = torch.full((batch_size,), step, device=device, dtype=torch.long)
-            index = self.ddpm_num_timesteps - i - 1
+            timestamp = torch.full((batch_size,), step, device=device, dtype=torch.long)  # 981s for the first loop
+            index = total_steps - i - 1  # 49 for the first loop
             samples = self.sample_ddim(
                 samples,
                 conditioning,
@@ -100,7 +113,7 @@ class DDIMSamper:
     def sample_ddim(
         self,
         x,
-        c,
+        c,  # -0.0047, -0.0047
         t,
         index,
         temperature=1.0,
@@ -116,14 +129,15 @@ class DDIMSamper:
         e_t_uncond, e_t = self.model(x_in, t_in, c_in).chunk(2)
         e_t = e_t_uncond + unconditional_guidance_scale * (e_t - e_t_uncond)
 
-        alphas = self.model.alphas_cumprod
-        alphas_prev = self.model.alphas_cumprod_prev
-        sqrt_one_minus_alphas = self.model.sqrt_one_minus_alphas_cumprod
+        alphas = self.ddim_alphas
+        alphas_prev = self.ddim_alphas_prev
+        sqrt_one_minus_alphas = self.ddim_sqrt_one_minus_alphas
+        sigmas = self.ddim_sigmas
 
         # select parameters corresponding to the currently considered timestep
         a_t = torch.full((b, 1, 1, 1), alphas[index], device=device)
         a_prev = torch.full((b, 1, 1, 1), alphas_prev[index], device=device)
-        sigma_t = torch.full((b, 1, 1, 1), 0, device=device)
+        sigma_t = torch.full((b, 1, 1, 1), sigmas[index], device=device)
         sqrt_one_minus_at = torch.full(
             (b, 1, 1, 1), sqrt_one_minus_alphas[index], device=device
         )
