@@ -39,7 +39,8 @@ ARG BASE_DIR=/root/diffusion
 
 RUN mkdir -p $BASE_DIR
 RUN wget https://github.com/JeonChangmin/latent-diffusion/archive/refs/heads/main.zip -O $BASE_DIR/main.zip
-RUN unzip $BASE_DIR/main.zip -d $BASE_DIR/latent-diffusion
+RUN unzip $BASE_DIR/main.zip -d $BASE_DIR
+RUN mv $BASE_DIR/latent-diffusion-main $BASE_DIR/latent-diffusion
 RUN rm $BASE_DIR/main.zip
 
 RUN apt-get update && apt-get install -y --no-install-recommends git
