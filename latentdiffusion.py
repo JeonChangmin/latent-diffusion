@@ -27,11 +27,12 @@ class LatentDiffusion(nn.Module):
         linear_start=1e-4,
         linear_end=2e-2,
     ):
+        super().__init__()
         self.model = UNetModel(**unet_config)
         self.first_stage_model = AutoencoderKL(**first_stage_config)
         self.cond_stage_model = BERTEmbedder(**cond_stage_config)
         self.scale_factor = scale_factor
-        self.num_timesteps = int(timesteps)
+        self.ddpm_num_timesteps = int(timesteps)
 
         betas = (
             np.linspace(linear_start**0.5, linear_end**0.5, timesteps, dtype=np.float64)
@@ -57,11 +58,12 @@ class LatentDiffusion(nn.Module):
 class DDIMSamper:
     def __init__(self, model: LatentDiffusion):
         self.model = model
-        self.num_timesteps = model.num_timesteps
+        self.ddpm_num_timesteps = model.num_timesteps
 
     @torch.no_grad()
     def sample(
         self,
+        ddim_steps,
         batch_size,
         img_shape,
         conditioning=None,
@@ -69,15 +71,20 @@ class DDIMSamper:
         unconditional_conditioning=None,
         temperature=1.0,
     ):
+
         device = self.model.alphas_cumprod.device
         samples = torch.randn((batch_size, *img_shape), device=device)
+        timesteps = (
+            np.arange(0, self.ddpm_num_timesteps, self.ddpm_num_timesteps // ddim_steps)
+            + 1
+        )
         iterator = tqdm(
-            reversed(range(0, self.num_timesteps)),
-            total=self.num_timesteps,
+            np.flip(timesteps),
+            total=self.ddpm_num_timesteps,
         )
         for i, step in enumerate(iterator):
             timestamp = torch.full((batch_size,), step, device=device, dtype=torch.long)
-            index = self.num_timesteps - i - 1
+            index = self.ddpm_num_timesteps - i - 1
             samples = self.sample_ddim(
                 samples,
                 conditioning,
@@ -133,6 +140,10 @@ class DDIMSamper:
 
 def state_dict_of(state_dict_path: str) -> Dict[str, Any]:
     state_dict = torch.load(state_dict_path, map_location="cpu")["state_dict"]
+    for k in list(state_dict.keys()):
+        if k.startswith("model.diffusion_model."):
+            new_k = k.replace("model.diffusion_model.", "model.")
+            state_dict[new_k] = state_dict.pop(k)
     return state_dict
 
 
@@ -140,17 +151,26 @@ if __name__ == "__main__":
     opt = Namespace()
     opt.prompt = "a virus monster is playing guitar, oil on canvas"
     opt.n_samples = 4
+    opt.ddim_steps = 50
     opt.scale = 5.0
     opt.H = 256
     opt.W = 256
     opt.outdir = "outputs/txt2img-samples"
     print(opt)
 
+    assert torch.cuda.is_available()
+    device = torch.device("cuda")
+
     with Path("latent-diffusion.yaml").open("r") as f:
         model_config = yaml.load(f, Loader=yaml.FullLoader)
         pprint(model_config)
     model = LatentDiffusion(**model_config)
-    model.load_state_dict(state_dict_of("models/ldm/text2img-large/model.ckpt"))
+    missing_keys, unexpected_keys = model.load_state_dict(
+        state_dict_of("models/ldm/text2img-large/model.ckpt"), strict=False
+    )
+    assert not missing_keys
+    model.eval()
+    model.to(device)
 
     sampler = DDIMSamper(model)
 
@@ -163,6 +183,7 @@ if __name__ == "__main__":
         c = model.cond_stage_model.encode(opt.n_samples * [opt.prompt])
         img_shape = [4, opt.H // 8, opt.W // 8]
         samples_ddim = sampler.sample(
+            ddim_steps=opt.ddim_steps,
             batch_size=opt.n_samples,
             img_shape=img_shape,
             conditioning=c,
