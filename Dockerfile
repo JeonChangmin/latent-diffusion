@@ -50,4 +50,6 @@ RUN python3 -m pip install \
     -e git+https://github.com/CompVis/taming-transformers.git@master#egg=taming-transformers \
     -e git+https://github.com/openai/CLIP.git@main#egg=clip
 
+RUN python3 -m pip install ftfy accelerate scipy
+
 WORKDIR $BASE_DIR
