@@ -175,7 +175,7 @@ if __name__ == "__main__":
     assert torch.cuda.is_available()
     device = torch.device("cuda")
 
-    with Path("latent-diffusion.yaml").open("r") as f:
+    with Path("stable-diffusion.yaml").open("r") as f:
         model_config = yaml.load(f, Loader=yaml.FullLoader)
         pprint(model_config)
     model = LatentDiffusion(**model_config)
