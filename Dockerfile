@@ -42,6 +42,9 @@ RUN python3 -m pip install \
     -e git+https://github.com/openai/CLIP.git@main#egg=clip
 
 RUN python3 -m pip install ftfy accelerate scipy
+RUN python3 -m pip install packaging==21.3
+RUN python3 -m pip install 'torchmetrics<0.8'
+RUN python3 -m pip install kornia
 
 ARG BASE_DIR=/root/diffusion
 
