@@ -49,7 +49,7 @@ RUN python3 -m pip install kornia
 ARG BASE_DIR=/root/diffusion
 
 RUN mkdir -p $BASE_DIR
-RUN git clone --depth 1 https://github.com/JeonChangmin/latent-diffusion.git $BASE_DIR/latent-diffusion
+RUN git clone --depth 2 https://github.com/JeonChangmin/latent-diffusion.git $BASE_DIR/latent-diffusion
 
 RUN cp $BASE_DIR/latent-diffusion/notebooks/DDPM_DDIM_CFG_tutorial.ipynb $BASE_DIR/
 RUN cp $BASE_DIR/latent-diffusion/notebooks/Diffusers_Tasks_Tutorial.ipynb $BASE_DIR/
